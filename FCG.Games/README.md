@@ -1,32 +1,32 @@
 # FCG.Games
 
-Microserviço de Games - .NET 8, ASP.NET Core Web API
+Microserviï¿½o de Games - .NET 8, ASP.NET Core Web API
 
-Resumo rápido:
-- CRUD básico para jogos (Create, GetById, Search)
-- Purchase intent que publica evento `PurchaseRequested` em um tópico
-- Audit log (tabela `AuditEvents`) para alterações em jogos e pedidos
-- Busca otimizada com provider configurável: Azure Cognitive Search (via env) ou fallback SQL
-- Autenticação via JWT (apenas para endpoints, health é aberto)
-- OpenTelemetry instrumentação
-- Pronto para execução em Docker e Azure
+Resumo rï¿½pido:
+- CRUD bï¿½sico para jogos (Create, GetById, Search)
+- Purchase intent que publica evento `PurchaseRequested` em um tï¿½pico
+- Audit log (tabela `AuditEvents`) para alteraï¿½ï¿½es em jogos e pedidos
+- Busca otimizada com provider configurï¿½vel: Azure Cognitive Search (via env) ou fallback SQL
+- Autenticaï¿½ï¿½o via JWT (apenas para endpoints, health ï¿½ aberto)
+- OpenTelemetry instrumentaï¿½ï¿½o
+- Pronto para execuï¿½ï¿½o em Docker e Azure
 
 Endpoints principais:
 - POST `/api/games` - criar jogo (JWT)
 - GET `/api/games/{id}` - obter jogo por id (JWT)
 - GET `/api/games/search?query=&genre=&minPrice=&maxPrice=&page=&pageSize=` - busca (JWT)
-- POST `/api/games/{gameId}/purchase` - iniciar intenção de compra (publica evento) (JWT)
-- GET `/api/games/recommendations` - recomendações simples (JWT)
+- POST `/api/games/{gameId}/purchase` - iniciar intenï¿½ï¿½o de compra (publica evento) (JWT)
+- GET `/api/games/recommendations` - recomendaï¿½ï¿½es simples (JWT)
 
 Eventos:
-- `PurchaseRequested` - publicado quando usuário inicia compra. Contém PurchaseId, UserId, GameId, Price, Currency, RequestedAtUtc, CorrelationId.
+- `PurchaseRequested` - publicado quando usuï¿½rio inicia compra. Contï¿½m PurchaseId, UserId, GameId, Price, Currency, RequestedAtUtc, CorrelationId.
 
 Audit:
-- Tabela `AuditEvents` salva ações Add/Update para entidades (incluindo jogos e pedidos).
+- Tabela `AuditEvents` salva aï¿½ï¿½es Add/Update para entidades (incluindo jogos e pedidos).
 
 Search provider:
-- Configurar `AZURE_SEARCH_ENDPOINT` e `AZURE_SEARCH_KEY` como variáveis de ambiente para usar Azure Cognitive Search (implementação placeholder hoje).
-- Caso contrário, usa pesquisa via SQL com `LIKE` (fallback). For demo local, use SQL fallback.
+- Configurar `AZURE_SEARCH_ENDPOINT` e `AZURE_SEARCH_KEY` como variï¿½veis de ambiente para usar Azure Cognitive Search (implementaï¿½ï¿½o placeholder hoje).
+- Caso contrï¿½rio, usa pesquisa via SQL com `LIKE` (fallback). For demo local, use SQL fallback.
 
 Service Bus:
 - Configure `ServiceBus:ConnectionString` in appsettings or `SERVICE_BUS_CONNECTION_STRING` env var.
@@ -38,7 +38,14 @@ Run (local with Docker):
 - See `docker-compose.yml` to run API + SQL Server
 
 Testing:
-- Unit tests present in the solution (project `FCG.Games.Tests`).
+- Unit tests are located in the `FCG.Games.Tests` project under the `Tests` folder.
+- Run them with the .NET CLI from the FCG.Games folder:
+  ```bash
+  dotnet test FCG.Games.Tests/FCG.Games.Tests.csproj
+  ```
+- The tests cover core services (`GameService`, `PurchaseService`), the EF `AppDbContext` auditing logic and basic controller behavior.
+- To add new tests, create additional classes in the `Tests` folder, reference `Moq` or create simple stubs, and rely on `Microsoft.EntityFrameworkCore.InMemory` for database-related code.
+- You can execute an individual test file or group by using the `--filter` option.
 
 Notes:
 - Azure integrations (Search) are placeholders but interfaces are ready for production wiring.
