@@ -24,9 +24,8 @@ public class AppDbContextTests
         {
             Id = Guid.NewGuid(),
             Title = "Test Game",
-            Genre = "RPG",
-            Price = 29.99m,
-            Currency = "USD"
+            Description = "A test game",
+            Price = 29.99m
         };
 
         context.Games.Add(game);
@@ -48,7 +47,7 @@ public class AppDbContextTests
         {
             Id = Guid.NewGuid(),
             Title = "Original",
-            Genre = "RPG",
+            Description = "Original desc",
             Price = 10m
         };
 
@@ -74,7 +73,7 @@ public class AppDbContextTests
         {
             Id = Guid.NewGuid(),
             Title = "Test",
-            Genre = "FPS",
+            Description = "Test desc",
             Price = 5m
         };
 

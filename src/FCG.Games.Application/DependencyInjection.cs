@@ -14,11 +14,16 @@ public static class DependencyInjection
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
         services.AddScoped<IQueryHandler<ListGamesQuery, Result<IReadOnlyList<GameDto>>>, ListGamesQueryHandler>();
+        services.AddScoped<IQueryHandler<GetGameByIdQuery, Result<GameDto>>, GetGameByIdQueryHandler>();
         services.AddScoped<IQueryHandler<GetRecommendationsQuery, Result<IReadOnlyList<GameDto>>>, GetRecommendationsQueryHandler>();
+        services.AddScoped<IQueryHandler<GetUserLibraryQuery, Result<IReadOnlyList<GameDto>>>, GetUserLibraryQueryHandler>();
+        services.AddScoped<ICommandHandler<CreateGameCommand, Result<GameDto>>, CreateGameCommandHandler>();
+        services.AddScoped<ICommandHandler<UpdateGameCommand, Result<GameDto>>, UpdateGameCommandHandler>();
+        services.AddScoped<ICommandHandler<DeleteGameCommand, Result>, DeleteGameCommandHandler>();
         services.AddScoped<ICommandHandler<PlaceOrderCommand, Result<PurchaseResultDto>>, PlaceOrderCommandHandler>(sp =>
         {
             var config = sp.GetService<Microsoft.Extensions.Configuration.IConfiguration>();
-            var topic = config?["ServiceBus:OrderPlacedTopic"] ?? "order-placed";
+            var topic = config?["ServiceBus:OrderPlacedQueue"] ?? "order-placed";
             return new PlaceOrderCommandHandler(
                 sp.GetRequiredService<FCG.Games.Domain.Interfaces.IGameRepository>(),
                 sp.GetRequiredService<FCG.Games.Domain.Interfaces.IUserLibraryRepository>(),

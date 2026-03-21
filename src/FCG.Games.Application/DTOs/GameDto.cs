@@ -3,7 +3,5 @@ namespace FCG.Games.Application.DTOs;
 public sealed record GameDto(
     Guid Id,
     string Title,
-    string? Description,
-    string Genre,
-    decimal Price,
-    string Currency);
+    string Description,
+    decimal Price);

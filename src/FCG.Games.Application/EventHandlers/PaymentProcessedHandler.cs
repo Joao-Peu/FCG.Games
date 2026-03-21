@@ -1,5 +1,4 @@
 using FCG.Games.Domain.Entities;
-using FCG.Games.Domain.Enums;
 using FCG.Games.Domain.Events;
 using FCG.Games.Domain.Interfaces;
 
@@ -26,10 +25,10 @@ public sealed class PaymentProcessedHandler : IEventHandler<PaymentProcessedEven
         var order = await _orderRepository.GetByIdAsync(@event.OrderId, cancellationToken);
         if (order is null) return;
 
+        order.IsProcessed = true;
+
         if (@event.Status == "Approved")
         {
-            order.Status = OrderStatus.Completed;
-            order.IsProcessed = true;
             await _orderRepository.UpdateAsync(order, cancellationToken);
 
             var libraryEntry = new UserLibraryEntry
@@ -43,7 +42,6 @@ public sealed class PaymentProcessedHandler : IEventHandler<PaymentProcessedEven
         }
         else
         {
-            order.Status = OrderStatus.PaymentFailed;
             await _orderRepository.UpdateAsync(order, cancellationToken);
         }
 

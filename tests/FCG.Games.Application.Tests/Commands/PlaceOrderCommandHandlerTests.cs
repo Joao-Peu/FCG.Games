@@ -33,17 +33,16 @@ public class PlaceOrderCommandHandlerTests
     {
         var gameId = Guid.NewGuid();
         var userId = Guid.NewGuid();
-        var game = new Game { Id = gameId, Title = "Test", Genre = "RPG", Price = 59.99m, Currency = "USD" };
+        var game = new Game { Id = gameId, Title = "Test", Description = "Desc", Price = 59.99m };
 
         _gameRepo.GetByIdAsync(gameId, Arg.Any<CancellationToken>()).Returns(game);
         _libraryRepo.ExistsAsync(userId, gameId, Arg.Any<CancellationToken>()).Returns(false);
         _orderRepo.HasPendingOrderAsync(userId, gameId, Arg.Any<CancellationToken>()).Returns(false);
         _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(1);
 
-        var result = await _handler.HandleAsync(new PlaceOrderCommand(userId, gameId, "corr-123"));
+        var result = await _handler.HandleAsync(new PlaceOrderCommand(userId, gameId));
 
         Assert.True(result.IsSuccess);
-        Assert.Equal("PendingPayment", result.Value!.Status);
         await _orderRepo.Received(1).AddAsync(Arg.Any<OrderGame>(), Arg.Any<CancellationToken>());
         await _publisher.Received(1).PublishAsync("order-placed", Arg.Any<OrderPlacedEvent>(), Arg.Any<CancellationToken>());
     }
@@ -54,7 +53,7 @@ public class PlaceOrderCommandHandlerTests
         var gameId = Guid.NewGuid();
         _gameRepo.GetByIdAsync(gameId, Arg.Any<CancellationToken>()).Returns((Game?)null);
 
-        var result = await _handler.HandleAsync(new PlaceOrderCommand(Guid.NewGuid(), gameId, null));
+        var result = await _handler.HandleAsync(new PlaceOrderCommand(Guid.NewGuid(), gameId));
 
         Assert.True(result.IsFailure);
         Assert.Equal(Errors.GameNotFound, result.Error);
@@ -65,12 +64,12 @@ public class PlaceOrderCommandHandlerTests
     {
         var gameId = Guid.NewGuid();
         var userId = Guid.NewGuid();
-        var game = new Game { Id = gameId, Title = "Test", Genre = "RPG", Price = 10m };
+        var game = new Game { Id = gameId, Title = "Test", Description = "Desc", Price = 10m };
 
         _gameRepo.GetByIdAsync(gameId, Arg.Any<CancellationToken>()).Returns(game);
         _libraryRepo.ExistsAsync(userId, gameId, Arg.Any<CancellationToken>()).Returns(true);
 
-        var result = await _handler.HandleAsync(new PlaceOrderCommand(userId, gameId, null));
+        var result = await _handler.HandleAsync(new PlaceOrderCommand(userId, gameId));
 
         Assert.True(result.IsFailure);
         Assert.Equal(Errors.AlreadyOwned, result.Error);
@@ -81,13 +80,13 @@ public class PlaceOrderCommandHandlerTests
     {
         var gameId = Guid.NewGuid();
         var userId = Guid.NewGuid();
-        var game = new Game { Id = gameId, Title = "Test", Genre = "RPG", Price = 10m };
+        var game = new Game { Id = gameId, Title = "Test", Description = "Desc", Price = 10m };
 
         _gameRepo.GetByIdAsync(gameId, Arg.Any<CancellationToken>()).Returns(game);
         _libraryRepo.ExistsAsync(userId, gameId, Arg.Any<CancellationToken>()).Returns(false);
         _orderRepo.HasPendingOrderAsync(userId, gameId, Arg.Any<CancellationToken>()).Returns(true);
 
-        var result = await _handler.HandleAsync(new PlaceOrderCommand(userId, gameId, null));
+        var result = await _handler.HandleAsync(new PlaceOrderCommand(userId, gameId));
 
         Assert.True(result.IsFailure);
         Assert.Equal(Errors.PendingOrder, result.Error);

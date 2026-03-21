@@ -34,20 +34,17 @@ public static class DependencyInjection
 
         // Messaging
         var sbConnectionString = configuration["ServiceBus:ConnectionString"];
-        if (!string.IsNullOrEmpty(sbConnectionString))
+        if (!string.IsNullOrWhiteSpace(sbConnectionString))
         {
-            var sbClient = new ServiceBusClient(sbConnectionString);
-            services.AddSingleton(sbClient);
+            services.AddSingleton(_ => new ServiceBusClient(sbConnectionString)); 
             services.AddSingleton<IEventPublisher, ServiceBusEventPublisher>();
 
-            var topic = configuration["ServiceBus:PaymentProcessedTopic"] ?? "payment-events";
-            var subscription = configuration["ServiceBus:PaymentProcessedSubscription"] ?? "games-service";
+            var queue = configuration["ServiceBus:PaymentProcessedQueue"] ?? "payments-processed";
             services.AddHostedService(sp => new ServiceBusConsumerService(
                 sp.GetRequiredService<ServiceBusClient>(),
                 sp.GetRequiredService<IServiceScopeFactory>(),
                 sp.GetRequiredService<ILogger<ServiceBusConsumerService>>(),
-                topic,
-                subscription));
+                queue));
         }
         else
         {

@@ -4,106 +4,139 @@ using FCG.Games.Application;
 using FCG.Games.Infrastructure;
 using FCG.Games.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.IdentityModel.Tokens;
-using Microsoft.OpenApi.Models;
-using Azure.Monitor.OpenTelemetry.AspNetCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using Scalar.AspNetCore;
+using Serilog;
+using Serilog.Sinks.ApplicationInsights.TelemetryConverters;
 
-var builder = WebApplication.CreateBuilder(args);
-var configuration = builder.Configuration;
-var services = builder.Services;
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .WriteTo.Console()
+    .CreateBootstrapLogger();
 
-// Controllers
-services.AddControllers();
-services.AddEndpointsApiExplorer();
-
-// Swagger with Bearer security definition (API Management compatible)
-services.AddSwaggerGen(c =>
+try
 {
-    c.SwaggerDoc("v1", new OpenApiInfo { Title = "FCG.Games API", Version = "v1" });
-    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    var builder = WebApplication.CreateBuilder(args);
+    var configuration = builder.Configuration;
+    var services = builder.Services;
+
+    // Serilog
+    builder.Host.UseSerilog((context, svcProvider, loggerConfig) => loggerConfig
+        .ReadFrom.Configuration(context.Configuration)
+        .ReadFrom.Services(svcProvider)
+        .Enrich.FromLogContext()
+        .Enrich.WithMachineName()
+        .Enrich.WithThreadId()
+        .Enrich.WithProperty("ServiceName", "FCG.Games")
+        .WriteTo.Console(outputTemplate:
+            "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {Properties:j}{NewLine}{Exception}")
+        .WriteTo.Conditional(
+            _ => !string.IsNullOrEmpty(context.Configuration["ApplicationInsights:ConnectionString"]),
+            wt => wt.ApplicationInsights(
+                context.Configuration["ApplicationInsights:ConnectionString"],
+                new TraceTelemetryConverter())));
+
+    // Controllers
+    services.AddControllers();
+    services.AddEndpointsApiExplorer();
+    services.AddSwaggerGen(options =>
     {
-        Description = "JWT Authorization header using the Bearer scheme.",
-        Name = "Authorization",
-        In = ParameterLocation.Header,
-        Type = SecuritySchemeType.Http,
-        Scheme = "bearer",
-        BearerFormat = "JWT"
-    });
-    c.AddSecurityRequirement(new OpenApiSecurityRequirement
-    {
+        options.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
         {
-            new OpenApiSecurityScheme
-            {
-                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
-            },
-            Array.Empty<string>()
-        }
-    });
-});
-
-// Application + Infrastructure layers
-services.AddApplication();
-services.AddInfrastructure(configuration);
-
-// JWT Authentication
-var jwtKey = configuration["Jwt:Key"] ?? string.Empty;
-var jwtIssuer = configuration["Jwt:Issuer"] ?? string.Empty;
-var jwtAudience = configuration["Jwt:Audience"] ?? string.Empty;
-
-services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
-    {
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = !string.IsNullOrEmpty(jwtIssuer),
-            ValidIssuer = jwtIssuer,
-            ValidateAudience = !string.IsNullOrEmpty(jwtAudience),
-            ValidAudience = jwtAudience,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = !string.IsNullOrEmpty(jwtKey),
-            IssuerSigningKey = !string.IsNullOrEmpty(jwtKey)
-                ? new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
-                : null
-        };
-    });
-services.AddAuthorization();
-
-// OpenTelemetry + Azure Monitor
-var azureMonitorConnectionString = configuration["AzureMonitor:ConnectionString"];
-if (!string.IsNullOrEmpty(azureMonitorConnectionString))
-{
-    services.AddOpenTelemetry()
-        .UseAzureMonitor(options =>
-        {
-            options.ConnectionString = azureMonitorConnectionString;
+            Name = "Authorization",
+            Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
+            Scheme = "bearer",
+            BearerFormat = "JWT",
+            In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+            Description = "Insira o token JWT. Exemplo: eyJhbGciOiJIUzI1NiIs..."
         });
-}
+        options.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+        {
+            {
+                new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+                {
+                    Reference = new Microsoft.OpenApi.Models.OpenApiReference
+                    {
+                        Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
+                        Id = "Bearer"
+                    }
+                },
+                Array.Empty<string>()
+            }
+        });
+    });
 
-// Middleware
-services.AddSingleton<CorrelationIdMiddleware>();
+    // Application + Infrastructure layers
+    services.AddApplication();
+    services.AddInfrastructure(configuration);
 
-var app = builder.Build();
+    // JWT Authentication
+    var jwtKey = configuration["Jwt:Key"] ?? string.Empty;
+    var jwtIssuer = configuration["Jwt:Issuer"] ?? string.Empty;
+    var jwtAudience = configuration["Jwt:Audience"] ?? string.Empty;
 
-app.UseMiddleware<CorrelationIdMiddleware>();
+    services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+        .AddJwtBearer(options =>
+        {
+            options.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = !string.IsNullOrEmpty(jwtIssuer),
+                ValidIssuer = jwtIssuer,
+                ValidateAudience = !string.IsNullOrEmpty(jwtAudience),
+                ValidAudience = jwtAudience,
+                ValidateLifetime = true,
+                ValidateIssuerSigningKey = !string.IsNullOrEmpty(jwtKey),
+                IssuerSigningKey = !string.IsNullOrEmpty(jwtKey)
+                    ? new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
+                    : null
+            };
+        });
+    services.AddAuthorization();
 
-if (app.Environment.IsDevelopment())
-{
+    // Middleware
+    services.AddSingleton<CorrelationIdMiddleware>();
+
+    var app = builder.Build();
+
+    app.UseMiddleware<CorrelationIdMiddleware>();
+    app.UseSerilogRequestLogging();
+
     app.UseSwagger();
-    app.UseSwaggerUI();
+    app.MapScalarApiReference(options =>
+    {
+        options.WithTitle("FCG.Games API");
+        options.WithDefaultHttpClient(ScalarTarget.CSharp, ScalarClient.HttpClient);
+        options.WithOpenApiRoutePattern("/swagger/{documentName}/swagger.json");
+        options.WithPreferredScheme("Bearer");
+        options.WithHttpBearerAuthentication(bearer =>
+        {
+            bearer.Token = string.Empty;
+        });
+    });
+
+    app.UseHttpsRedirection();
+    app.UseAuthentication();
+    app.UseAuthorization();
+    app.MapControllers();
+
+    // Ensure DB created + seed (for dev/demo) — retries handle Azure SQL Serverless cold-start
+    using (var scope = app.Services.CreateScope())
+    {
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var strategy = db.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () => { await db.Database.EnsureCreatedAsync(); });
+        var seederLogger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger(nameof(DatabaseSeeder));
+        await DatabaseSeeder.SeedAsync(db, seederLogger);
+    }
+
+    app.Run();
 }
-
-app.UseHttpsRedirection();
-app.UseAuthentication();
-app.UseAuthorization();
-app.MapControllers();
-
-// Ensure DB created (for dev/demo) — retries handle Azure SQL Serverless cold-start
-using (var scope = app.Services.CreateScope())
+catch (Exception ex)
 {
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    var strategy = db.Database.CreateExecutionStrategy();
-    await strategy.ExecuteAsync(async () => { await db.Database.EnsureCreatedAsync(); });
+    Log.Fatal(ex, "Application terminated unexpectedly");
 }
-
-app.Run();
+finally
+{
+    Log.CloseAndFlush();
+}

@@ -11,19 +11,19 @@ public class OrderRepository : IOrderRepository
     public OrderRepository(AppDbContext context) => _context = context;
 
     public async Task AddAsync(OrderGame order, CancellationToken cancellationToken = default) =>
-        await _context.Orders.AddAsync(order, cancellationToken);
+        await _context.OrderGames.AddAsync(order, cancellationToken);
 
     public async Task<OrderGame?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
-        await _context.Orders.FindAsync(new object[] { id }, cancellationToken);
+        await _context.OrderGames.FindAsync(new object[] { id }, cancellationToken);
 
     public async Task<bool> HasPendingOrderAsync(Guid userId, Guid gameId, CancellationToken cancellationToken = default) =>
-        await _context.Orders.AnyAsync(
+        await _context.OrderGames.AnyAsync(
             o => o.UserId == userId && o.GameId == gameId && !o.IsProcessed,
             cancellationToken);
 
     public Task UpdateAsync(OrderGame order, CancellationToken cancellationToken = default)
     {
-        _context.Orders.Update(order);
+        _context.OrderGames.Update(order);
         return Task.CompletedTask;
     }
 }

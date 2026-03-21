@@ -6,5 +6,5 @@ namespace FCG.Games.Application.Mappings;
 public static class GameMappingExtensions
 {
     public static GameDto ToDto(this Game game) =>
-        new(game.Id, game.Title, game.Description, game.Genre, game.Price, game.Currency);
+        new(game.Id, game.Title, game.Description, game.Price);
 }

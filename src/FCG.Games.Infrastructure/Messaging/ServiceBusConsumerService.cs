@@ -13,27 +13,24 @@ public class ServiceBusConsumerService : BackgroundService
     private readonly ServiceBusClient _client;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ServiceBusConsumerService> _logger;
-    private readonly string _topic;
-    private readonly string _subscription;
+    private readonly string _queue;
     private ServiceBusProcessor? _processor;
 
     public ServiceBusConsumerService(
         ServiceBusClient client,
         IServiceScopeFactory scopeFactory,
         ILogger<ServiceBusConsumerService> logger,
-        string topic,
-        string subscription)
+        string queue)
     {
         _client = client;
         _scopeFactory = scopeFactory;
         _logger = logger;
-        _topic = topic;
-        _subscription = subscription;
+        _queue = queue;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _processor = _client.CreateProcessor(_topic, _subscription, new ServiceBusProcessorOptions
+        _processor = _client.CreateProcessor(_queue, new ServiceBusProcessorOptions
         {
             AutoCompleteMessages = false
         });

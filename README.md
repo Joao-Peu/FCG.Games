@@ -226,15 +226,72 @@ O `ServiceBusEventPublisher` e o `ServiceBusConsumerService` utilizam logging es
 - Processamento de pagamentos (OrderId, Status)
 - Erros e falhas com contexto completo
 
-## Tecnologias
+## Dependências
 
-| Tecnologia | Uso |
-|------------|-----|
-| .NET 8 / ASP.NET Core | Framework da API |
-| Entity Framework Core 8 | ORM (Azure SQL Serverless, com retry para cold-start) |
-| Azure Service Bus | Mensageria assíncrona |
-| Azure Monitor / Application Insights | Observabilidade (OpenTelemetry) |
-| JWT Bearer | Autenticação |
-| Swagger / OpenAPI | Documentação da API |
-| xUnit + NSubstitute | Testes unitários |
-| Docker | Containerização |
+### Projetos de Produção
+
+#### FCG.Games.Domain
+
+Sem dependências externas (zero NuGet).
+
+#### FCG.Games.Application
+
+| Pacote | Versão | Finalidade |
+|--------|--------|------------|
+| `Microsoft.Extensions.Configuration.Abstractions` | 8.0.0 | Abstração de configuração |
+| `Microsoft.Extensions.DependencyInjection.Abstractions` | 8.0.0 | Abstração de injeção de dependência |
+
+> Referencia: `FCG.Games.Domain`
+
+#### FCG.Games.Infrastructure
+
+| Pacote | Versão | Finalidade |
+|--------|--------|------------|
+| `Microsoft.EntityFrameworkCore.SqlServer` | 8.0.0 | ORM com suporte a SQL Server / Azure SQL |
+| `Azure.Messaging.ServiceBus` | 7.20.1 | Mensageria assíncrona (Azure Service Bus) |
+| `Microsoft.Extensions.Hosting.Abstractions` | 8.0.0 | BackgroundService para consumo de eventos |
+
+> Referencia: `FCG.Games.Application`
+
+#### FCG.Games.Api
+
+| Pacote | Versão | Finalidade |
+|--------|--------|------------|
+| `Microsoft.AspNetCore.Authentication.JwtBearer` | 8.0.0 | Autenticação JWT Bearer |
+| `Serilog.AspNetCore` | 8.0.3 | Logging estruturado |
+| `Serilog.Sinks.ApplicationInsights` | 4.0.0 | Envio de logs para Application Insights |
+| `Serilog.Enrichers.Environment` | 2.3.0 | Enriquecimento de logs com info de ambiente |
+| `Serilog.Enrichers.Thread` | 4.0.0 | Enriquecimento de logs com ThreadId |
+| `Serilog.Expressions` | 4.0.0 | Filtros e expressões para Serilog |
+| `Scalar.AspNetCore` | 2.0.36 | Documentação interativa da API (Scalar UI) |
+| `Swashbuckle.AspNetCore` | 6.6.2 | Geração de spec OpenAPI / Swagger |
+
+> Referencia: `FCG.Games.Application`, `FCG.Games.Infrastructure`
+
+### Projetos de Teste
+
+#### FCG.Games.Domain.Tests
+
+| Pacote | Versão | Finalidade |
+|--------|--------|------------|
+| `Microsoft.NET.Test.Sdk` | 17.8.0 | SDK de testes |
+| `xunit` | 2.4.2 | Framework de testes |
+| `xunit.runner.visualstudio` | 2.4.5 | Runner para Visual Studio / CLI |
+
+#### FCG.Games.Application.Tests
+
+| Pacote | Versão | Finalidade |
+|--------|--------|------------|
+| `Microsoft.NET.Test.Sdk` | 17.8.0 | SDK de testes |
+| `NSubstitute` | 5.1.0 | Mocking de interfaces |
+| `xunit` | 2.4.2 | Framework de testes |
+| `xunit.runner.visualstudio` | 2.4.5 | Runner para Visual Studio / CLI |
+
+#### FCG.Games.Infrastructure.Tests
+
+| Pacote | Versão | Finalidade |
+|--------|--------|------------|
+| `Microsoft.EntityFrameworkCore.InMemory` | 8.0.0 | Banco em memória para testes de integração |
+| `Microsoft.NET.Test.Sdk` | 17.8.0 | SDK de testes |
+| `xunit` | 2.4.2 | Framework de testes |
+| `xunit.runner.visualstudio` | 2.4.5 | Runner para Visual Studio / CLI |

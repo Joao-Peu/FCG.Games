@@ -11,10 +11,16 @@ public class UserLibraryRepository : IUserLibraryRepository
     public UserLibraryRepository(AppDbContext context) => _context = context;
 
     public async Task AddAsync(UserLibraryEntry entry, CancellationToken cancellationToken = default) =>
-        await _context.UserLibraryEntries.AddAsync(entry, cancellationToken);
+        await _context.UserLibraries.AddAsync(entry, cancellationToken);
 
     public async Task<bool> ExistsAsync(Guid userId, Guid gameId, CancellationToken cancellationToken = default) =>
-        await _context.UserLibraryEntries.AnyAsync(
+        await _context.UserLibraries.AnyAsync(
             e => e.UserId == userId && e.GameId == gameId,
             cancellationToken);
+
+    public async Task<List<Guid>> GetGameIdsByUserAsync(Guid userId, CancellationToken cancellationToken = default) =>
+        await _context.UserLibraries
+            .Where(e => e.UserId == userId)
+            .Select(e => e.GameId)
+            .ToListAsync(cancellationToken);
 }

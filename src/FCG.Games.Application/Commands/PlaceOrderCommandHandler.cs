@@ -1,7 +1,6 @@
 using FCG.Games.Application.Abstractions;
 using FCG.Games.Application.DTOs;
 using FCG.Games.Domain.Entities;
-using FCG.Games.Domain.Enums;
 using FCG.Games.Domain.Events;
 using FCG.Games.Domain.Interfaces;
 using FCG.Games.Domain.ValueObjects;
@@ -52,12 +51,7 @@ public sealed class PlaceOrderCommandHandler : ICommandHandler<PlaceOrderCommand
             Id = Guid.NewGuid(),
             UserId = command.UserId,
             GameId = command.GameId,
-            Price = game.Price,
-            Currency = game.Currency,
-            Status = OrderStatus.PendingPayment,
-            IsProcessed = false,
-            RequestedAtUtc = DateTime.UtcNow,
-            CorrelationId = command.CorrelationId
+            IsProcessed = false
         };
 
         await _orderRepository.AddAsync(order, cancellationToken);
@@ -67,12 +61,10 @@ public sealed class PlaceOrderCommandHandler : ICommandHandler<PlaceOrderCommand
             order.Id,
             order.UserId,
             order.GameId,
-            order.Price,
-            order.Currency,
-            order.CorrelationId);
+            game.Price);
 
         await _eventPublisher.PublishAsync(_orderPlacedTopic, @event, cancellationToken);
 
-        return Result.Success(new PurchaseResultDto(order.Id, nameof(OrderStatus.PendingPayment)));
+        return Result.Success(new PurchaseResultDto(order.Id));
     }
 }

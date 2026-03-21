@@ -13,8 +13,8 @@ public class ListGamesQueryHandlerTests
     {
         var games = new List<Game>
         {
-            new() { Id = Guid.NewGuid(), Title = "Game 1", Genre = "RPG", Price = 29.99m, Currency = "USD" },
-            new() { Id = Guid.NewGuid(), Title = "Game 2", Genre = "FPS", Price = 49.99m, Currency = "USD" }
+            new() { Id = Guid.NewGuid(), Title = "Game 1", Description = "Desc 1", Price = 29.99m },
+            new() { Id = Guid.NewGuid(), Title = "Game 2", Description = "Desc 2", Price = 49.99m }
         };
 
         var repo = Substitute.For<IGameRepository>();

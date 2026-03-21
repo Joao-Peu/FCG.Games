@@ -35,11 +35,11 @@ public class ServiceBusEventPublisher : IEventPublisher
             }
 
             await sender.SendMessageAsync(sbMessage, cancellationToken);
-            _logger.LogInformation("Published {EventType} to topic {Topic}", typeof(T).Name, topic);
+            _logger.LogInformation("Published {EventType} to queue {Queue}", typeof(T).Name, topic);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to publish {EventType} to topic {Topic}", typeof(T).Name, topic);
+            _logger.LogError(ex, "Failed to publish {EventType} to queue {Queue}", typeof(T).Name, topic);
             throw;
         }
         finally

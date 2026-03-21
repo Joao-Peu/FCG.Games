@@ -17,6 +17,7 @@ public class CorrelationIdMiddleware : IMiddleware
         context.Response.Headers[Header] = correlation;
         using var activity = new Activity("request-correlation");
         activity.SetParentId(correlation);
+        activity.Start();
         await next(context);
     }
 }

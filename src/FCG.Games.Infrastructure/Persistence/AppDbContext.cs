@@ -9,8 +9,8 @@ public class AppDbContext : DbContext
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
     public DbSet<Game> Games => Set<Game>();
-    public DbSet<OrderGame> Orders => Set<OrderGame>();
-    public DbSet<UserLibraryEntry> UserLibraryEntries => Set<UserLibraryEntry>();
+    public DbSet<OrderGame> OrderGames => Set<OrderGame>();
+    public DbSet<UserLibraryEntry> UserLibraries => Set<UserLibraryEntry>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -29,6 +29,15 @@ public class AppDbContext : DbContext
             .Where(e => e.State == EntityState.Added || e.State == EntityState.Modified))
         {
             if (entry.Entity is AuditEvent) continue;
+
+            if (entry.Entity is Game game)
+            {
+                if (entry.State == EntityState.Added)
+                {
+                    game.CreatedAtUtc = now;
+                }
+                game.UpdatedAtUtc = now;
+            }
 
             var audit = new AuditEvent
             {
