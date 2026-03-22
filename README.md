@@ -1,6 +1,65 @@
 # FCG.Games API
 
-Microsserviço de catálogo de jogos e sistema de compras, desenvolvido com .NET 8 e ASP.NET Core Web API. Projeto da **Fase 3 do Tech Challenge — PosTech FIAP**.
+Microsserviço de catálogo de jogos, sistema de compras e biblioteca do usuário, desenvolvido com .NET 8 e ASP.NET Core Web API. Projeto da **Fase 3 do Tech Challenge — PosTech FIAP**.
+
+## Diagrama de Arquitetura
+
+```mermaid
+graph TB
+    subgraph "FCG.Games - Microsserviço de Jogos"
+        subgraph "API Layer"
+            GC[GamesController]
+            CIM[CorrelationIdMiddleware]
+        end
+
+        subgraph "Application Layer"
+            subgraph "Commands"
+                CGH[CreateGameCommandHandler]
+                UGH[UpdateGameCommandHandler]
+                DGH[DeleteGameCommandHandler]
+                POH[PlaceOrderCommandHandler]
+            end
+            subgraph "Queries"
+                LGH[ListGamesQueryHandler]
+                GBH[GetGameByIdQueryHandler]
+                GRH[GetRecommendationsQueryHandler]
+                GUH[GetUserLibraryQueryHandler]
+            end
+            subgraph "Event Handlers"
+                PPH[PaymentProcessedHandler]
+            end
+        end
+
+        subgraph "Domain Layer"
+            GE[Game Entity]
+            OE[OrderGame Entity]
+            ULE[UserLibraryEntry Entity]
+            AE[AuditEvent Entity]
+            RP[Result Pattern]
+        end
+
+        subgraph "Infrastructure Layer"
+            GR[GameRepository]
+            OR[OrderRepository]
+            ULR[UserLibraryRepository]
+            UoW[UnitOfWork]
+            SEP[ServiceBusEventPublisher]
+            SCS[ServiceBusConsumerService]
+            DBC[AppDbContext - Audit Trail]
+            DB[(SQL Server)]
+        end
+    end
+
+    Client([Cliente HTTP]) --> CIM --> GC
+    GC --> CGH & UGH & DGH & POH & LGH & GBH & GRH & GUH
+    POH --> GR & OR & ULR & UoW & SEP
+    PPH --> OR & ULR & UoW
+    LGH & GBH & GRH --> GR
+    GUH --> ULR & GR
+    GR & OR & ULR --> DBC --> DB
+    SEP --> SBOut[/Queue: order-placed\]
+    SBIn[/Queue: payments-processed\] --> SCS --> PPH
+```
 
 ## Arquitetura
 
@@ -11,7 +70,7 @@ src/
 ├── FCG.Games.Domain/           # Entidades, Value Objects, Eventos, Interfaces (zero dependências NuGet)
 ├── FCG.Games.Application/      # Commands, Queries, Handlers, DTOs
 ├── FCG.Games.Infrastructure/   # EF Core (SQL Server), Azure Service Bus, Repositórios, UnitOfWork
-└── FCG.Games.Api/              # Controllers, Middleware, Startup (JWT + Swagger + OpenTelemetry)
+└── FCG.Games.Api/              # Controllers, Middleware, Startup (JWT + Swagger)
 tests/
 ├── FCG.Games.Domain.Tests/     # Testes de Value Objects (Result/Error)
 ├── FCG.Games.Application.Tests/# Testes de Handlers com NSubstitute
@@ -22,25 +81,25 @@ tests/
 
 ## Endpoints
 
-Todos os endpoints exigem autenticação JWT (`[Authorize]`).
-
-| Método | Rota | Descrição | Resposta |
-|--------|------|-----------|----------|
-| `GET` | `/api/games` | Lista todos os jogos do catálogo | `200` com `GameDto[]` |
-| `POST` | `/api/games/{gameId}/purchase` | Solicita compra de um jogo | `202` Accepted / `404` Not Found / `409` Conflict |
-| `GET` | `/api/games/recommendations` | Top 10 jogos recomendados (por preço) | `200` com `GameDto[]` |
+| Método | Rota | Auth | Descrição |
+|--------|------|------|-----------|
+| `GET` | `/api/games` | Não | Lista todos os jogos do catálogo |
+| `GET` | `/api/games/{id}` | Não | Busca jogo por ID |
+| `POST` | `/api/games` | Admin | Cria novo jogo |
+| `PUT` | `/api/games/{id}` | Admin | Atualiza jogo existente |
+| `DELETE` | `/api/games/{id}` | Admin | Remove jogo do catálogo |
+| `POST` | `/api/games/{gameId}/purchase` | JWT | Solicita compra de um jogo |
+| `GET` | `/api/games/library` | JWT | Biblioteca de jogos do usuário |
+| `GET` | `/api/games/recommendations` | JWT | Top 10 jogos recomendados |
 
 ### Detalhes da Compra (`POST /api/games/{gameId}/purchase`)
 
-- Extrai `userId` do token JWT (claim `sub` ou `NameIdentifier`)
-- Aceita header `x-correlation-id` para rastreamento
+- Extrai `userId` do token JWT (claim `sub`)
 - Cria `OrderGame` com status `PendingPayment`
-- Publica `OrderPlacedEvent` no Azure Service Bus
+- Publica `OrderPlacedEvent` na queue `order-placed` do Azure Service Bus
 - Retorna `202 Accepted` com `{ orderId, status }`
 
-**Erros tratados:**
-- `404` — Jogo não encontrado (`Game.NotFound`)
-- `409` — Usuário já possui o jogo (`Game.AlreadyOwned`) ou já tem pedido pendente (`Order.Pending`)
+**Erros tratados:** `404` (jogo não encontrado), `409` (já possui ou pedido pendente)
 
 ## Domínio
 
@@ -48,55 +107,56 @@ Todos os endpoints exigem autenticação JWT (`[Authorize]`).
 
 | Entidade | Campos principais |
 |----------|-------------------|
-| `Game` | Id, Title, Description, Genre, Price, Currency, CreatedAtUtc, UpdatedAtUtc |
-| `OrderGame` | Id, UserId, GameId, Price, Currency, Status, IsProcessed, CorrelationId |
+| `Game` | Id, Title, Description, Genre, Price, CreatedAtUtc, UpdatedAtUtc |
+| `OrderGame` | Id, UserId, GameId, Price, Status, IsProcessed, CorrelationId |
 | `UserLibraryEntry` | Id, UserId, GameId, CreatedAt |
 | `AuditEvent` | EventId, EntityName, EntityKey, Action, Data, CreatedAtUtc |
 
-### Eventos de Domínio
+### Eventos
 
-| Evento | Descrição |
-|--------|-----------|
-| `OrderPlacedEvent` | Emitido ao criar pedido (OrderId, UserId, GameId, Price, Currency, CorrelationId) |
-| `PaymentProcessedEvent` | Recebido do serviço de pagamento (OrderId, UserId, GameId, Price, Status) |
+| Evento | Queue | Descrição |
+|--------|-------|-----------|
+| `OrderPlacedEvent` | `order-placed` | Emitido ao criar pedido (OrderId, UserId, GameId, Price) |
+| `PaymentProcessedEvent` | `payments-processed` | Recebido do serviço de pagamento (OrderId, Status) |
 
 ### Fluxo de Compra
 
+```mermaid
+sequenceDiagram
+    participant C as Cliente
+    participant G as FCG.Games API
+    participant SB as Service Bus
+    participant P as FCG.Payments Function
+    participant DB as SQL Server
+
+    C->>G: POST /api/games/{id}/purchase
+    G->>DB: Cria OrderGame (PendingPayment)
+    G->>SB: Publica OrderPlacedEvent (queue: order-placed)
+    G-->>C: 202 Accepted { orderId }
+
+    SB->>P: Trigger: order-placed
+    P->>DB: Cria PaymentTransaction
+    P->>SB: Publica PaymentProcessedEvent (queue: payments-processed)
+
+    SB->>G: Consumer: payments-processed
+    alt Status = Approved
+        G->>DB: Completa OrderGame + Adiciona à biblioteca
+    else Status = Rejected
+        G->>DB: Marca OrderGame como PaymentFailed
+    end
 ```
-[Cliente] → POST /purchase → [PlaceOrderCommandHandler]
-    → Cria OrderGame (PendingPayment)
-    → Publica OrderPlacedEvent no Service Bus (topic: order-placed)
-
-[Service Bus] → payment-events/games-service → [ServiceBusConsumerService]
-    → [PaymentProcessedHandler]
-        → Status "Approved": completa pedido + adiciona à biblioteca do usuário
-        → Status "Rejected": marca pedido como PaymentFailed
-```
-
-## Pré-requisitos
-
-- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
-- SQL Server (local ou Azure SQL Serverless)
-- Azure Service Bus (opcional — sem configuração, usa `NoOpEventPublisher`)
-- Azure Application Insights (opcional — sem configuração, sobe sem exporter)
 
 ## Configuração
-
-### appsettings.json
 
 ```json
 {
   "ConnectionStrings": {
-    "DefaultConnection": "Server=tcp:<server>.database.windows.net;Database=<db>;..."
+    "DefaultConnection": "Server=tcp:<server>;Database=<db>;..."
   },
   "ServiceBus": {
     "ConnectionString": "Endpoint=sb://<namespace>.servicebus.windows.net/;...",
-    "OrderPlacedTopic": "order-placed",
-    "PaymentProcessedTopic": "payment-events",
-    "PaymentProcessedSubscription": "games-service"
-  },
-  "AzureMonitor": {
-    "ConnectionString": "InstrumentationKey=<key>;IngestionEndpoint=..."
+    "OrderPlacedQueue": "order-placed",
+    "PaymentProcessedQueue": "payments-processed"
   },
   "Jwt": {
     "Key": "<chave-secreta>",
@@ -106,192 +166,47 @@ Todos os endpoints exigem autenticação JWT (`[Authorize]`).
 }
 ```
 
-### Variáveis de Ambiente (produção)
-
-O .NET usa `__` como separador de seções:
-
-```bash
-ConnectionStrings__DefaultConnection="Server=tcp:..."
-ServiceBus__ConnectionString="Endpoint=sb://..."
-AzureMonitor__ConnectionString="InstrumentationKey=..."
-Jwt__Key="<chave-secreta>"
-Jwt__Issuer="<issuer>"
-Jwt__Audience="<audience>"
-```
-
-### Comportamento sem configuração
-
 | Configuração | Vazia/ausente | Comportamento |
 |--------------|---------------|---------------|
-| `ConnectionStrings:DefaultConnection` | sim | Falha ao iniciar (requer SQL Server) |
+| `ConnectionStrings:DefaultConnection` | sim | Falha ao iniciar |
 | `ServiceBus:ConnectionString` | sim | Usa `NoOpEventPublisher` (eventos descartados) |
-| `AzureMonitor:ConnectionString` | sim | App sobe sem exporter (sem telemetria) |
 | `Jwt:Key` | sim | Validação de signing key desabilitada |
 
 ## Build & Run
 
 ```bash
-# Restaurar dependências
-dotnet restore FCG.Games.sln
-
 # Build
 dotnet build FCG.Games.sln
 
 # Executar API (http://localhost:5105)
 dotnet run --project src/FCG.Games.Api/FCG.Games.Api.csproj
-```
 
-> No startup, o app executa `Database.EnsureCreated()` automaticamente (modo dev/demo), com retry para suportar o cold-start do Azure SQL Serverless.
-
-### Azure SQL Serverless
-
-O projeto está configurado para Azure SQL Serverless, que pausa automaticamente após inatividade. Para lidar com o wake-up (~1 minuto):
-
-- **`EnableRetryOnFailure`** — 5 tentativas com até 30s de delay entre cada, cobrindo erros transitórios (incluindo erro 40613 do cold-start)
-- **`CommandTimeout(60)`** — 60s de timeout por comando para acomodar o tempo de wake-up
-- **`EnsureCreated` com `ExecutionStrategy`** — o startup usa a mesma política de retry, evitando falha se o banco estiver pausado
-
-## Testes
-
-O projeto possui **17 testes** usando xUnit + NSubstitute:
-
-```bash
-# Executar todos os testes
+# Executar testes (19 testes)
 dotnet test FCG.Games.sln
-
-# Testes de domínio (6 testes — Result/Error)
-dotnet test tests/FCG.Games.Domain.Tests/FCG.Games.Domain.Tests.csproj
-
-# Testes de aplicação (8 testes — Handlers)
-dotnet test tests/FCG.Games.Application.Tests/FCG.Games.Application.Tests.csproj
-
-# Testes de infraestrutura (3 testes — Audit Trail)
-dotnet test tests/FCG.Games.Infrastructure.Tests/FCG.Games.Infrastructure.Tests.csproj
-
-# Filtrar por classe
-dotnet test tests/FCG.Games.Application.Tests/FCG.Games.Application.Tests.csproj \
-  --filter FullyQualifiedName~PlaceOrderCommandHandlerTests
-
-# Filtrar por método
-dotnet test tests/FCG.Games.Application.Tests/FCG.Games.Application.Tests.csproj \
-  --filter HandleAsync_HappyPath_CreatesOrderAndPublishesEvent
 ```
-
-### Cobertura de Testes
-
-| Projeto | Classe | Testes |
-|---------|--------|--------|
-| Domain | `ResultTests` | 6 (Success/Failure genérico, Error.None, erros predefinidos) |
-| Application | `PlaceOrderCommandHandlerTests` | 4 (happy path, game not found, already owned, pending order) |
-| Application | `PaymentProcessedHandlerTests` | 2 (Approved, Rejected) |
-| Application | `ListGamesQueryHandlerTests` | 1 (mapeamento de jogos) |
-| Application | `GetRecommendationsQueryHandlerTests` | 1 (top 10 por preço) |
-| Infrastructure | `AppDbContextTests` | 3 (audit para insert, update, ignora AuditEvent) |
 
 ## Docker
 
 ```bash
-# Build da imagem
 docker build -t fcg-games .
-
-# Executar container
-docker run -p 8080:8080 \
+docker run -p 5105:8080 \
   -e ConnectionStrings__DefaultConnection="Server=tcp:..." \
-  -e ServiceBus__ConnectionString="Endpoint=sb://..." \
-  -e AzureMonitor__ConnectionString="InstrumentationKey=..." \
   -e Jwt__Key="<chave>" \
   fcg-games
 ```
 
+## Testes
+
+19 testes com xUnit + NSubstitute:
+
+| Projeto | Testes |
+|---------|--------|
+| Domain (Result/Error) | 6 |
+| Application (Handlers) | 10 |
+| Infrastructure (Audit Trail) | 3 |
+
 ## Observabilidade
 
-### Azure Monitor (Application Insights)
-
-O projeto utiliza `Azure.Monitor.OpenTelemetry.AspNetCore` para exportar traces, métricas e logs para o Application Insights. Quando `AzureMonitor:ConnectionString` é configurada, o `UseAzureMonitor()` ativa automaticamente:
-
-- Instrumentação ASP.NET Core (requests HTTP)
-- Instrumentação HTTP Client (chamadas externas)
-- Instrumentação SQL Client (queries ao banco)
-- Métricas de performance
-
-### Correlation ID
-
-O `CorrelationIdMiddleware` propaga o header `x-correlation-id` entre requests, permitindo rastreamento end-to-end no fluxo de compra.
-
-### Logging Estruturado
-
-O `ServiceBusEventPublisher` e o `ServiceBusConsumerService` utilizam logging estruturado com `ILogger`, registrando:
-
-- Publicação de eventos (tipo, tópico)
-- Processamento de pagamentos (OrderId, Status)
-- Erros e falhas com contexto completo
-
-## Dependências
-
-### Projetos de Produção
-
-#### FCG.Games.Domain
-
-Sem dependências externas (zero NuGet).
-
-#### FCG.Games.Application
-
-| Pacote | Versão | Finalidade |
-|--------|--------|------------|
-| `Microsoft.Extensions.Configuration.Abstractions` | 8.0.0 | Abstração de configuração |
-| `Microsoft.Extensions.DependencyInjection.Abstractions` | 8.0.0 | Abstração de injeção de dependência |
-
-> Referencia: `FCG.Games.Domain`
-
-#### FCG.Games.Infrastructure
-
-| Pacote | Versão | Finalidade |
-|--------|--------|------------|
-| `Microsoft.EntityFrameworkCore.SqlServer` | 8.0.0 | ORM com suporte a SQL Server / Azure SQL |
-| `Azure.Messaging.ServiceBus` | 7.20.1 | Mensageria assíncrona (Azure Service Bus) |
-| `Microsoft.Extensions.Hosting.Abstractions` | 8.0.0 | BackgroundService para consumo de eventos |
-
-> Referencia: `FCG.Games.Application`
-
-#### FCG.Games.Api
-
-| Pacote | Versão | Finalidade |
-|--------|--------|------------|
-| `Microsoft.AspNetCore.Authentication.JwtBearer` | 8.0.0 | Autenticação JWT Bearer |
-| `Serilog.AspNetCore` | 8.0.3 | Logging estruturado |
-| `Serilog.Sinks.ApplicationInsights` | 4.0.0 | Envio de logs para Application Insights |
-| `Serilog.Enrichers.Environment` | 2.3.0 | Enriquecimento de logs com info de ambiente |
-| `Serilog.Enrichers.Thread` | 4.0.0 | Enriquecimento de logs com ThreadId |
-| `Serilog.Expressions` | 4.0.0 | Filtros e expressões para Serilog |
-| `Scalar.AspNetCore` | 2.0.36 | Documentação interativa da API (Scalar UI) |
-| `Swashbuckle.AspNetCore` | 6.6.2 | Geração de spec OpenAPI / Swagger |
-
-> Referencia: `FCG.Games.Application`, `FCG.Games.Infrastructure`
-
-### Projetos de Teste
-
-#### FCG.Games.Domain.Tests
-
-| Pacote | Versão | Finalidade |
-|--------|--------|------------|
-| `Microsoft.NET.Test.Sdk` | 17.8.0 | SDK de testes |
-| `xunit` | 2.4.2 | Framework de testes |
-| `xunit.runner.visualstudio` | 2.4.5 | Runner para Visual Studio / CLI |
-
-#### FCG.Games.Application.Tests
-
-| Pacote | Versão | Finalidade |
-|--------|--------|------------|
-| `Microsoft.NET.Test.Sdk` | 17.8.0 | SDK de testes |
-| `NSubstitute` | 5.1.0 | Mocking de interfaces |
-| `xunit` | 2.4.2 | Framework de testes |
-| `xunit.runner.visualstudio` | 2.4.5 | Runner para Visual Studio / CLI |
-
-#### FCG.Games.Infrastructure.Tests
-
-| Pacote | Versão | Finalidade |
-|--------|--------|------------|
-| `Microsoft.EntityFrameworkCore.InMemory` | 8.0.0 | Banco em memória para testes de integração |
-| `Microsoft.NET.Test.Sdk` | 17.8.0 | SDK de testes |
-| `xunit` | 2.4.2 | Framework de testes |
-| `xunit.runner.visualstudio` | 2.4.5 | Runner para Visual Studio / CLI |
+- **Serilog** com sinks para Console e Application Insights
+- **CorrelationIdMiddleware** propaga `x-correlation-id` entre requests
+- **Audit Trail** automático via override de `SaveChangesAsync` no `AppDbContext`
