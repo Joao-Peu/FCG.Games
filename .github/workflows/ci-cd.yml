@@ -52,12 +52,7 @@ jobs:
 
       - name: Deploy to Azure Container App
         run: |
-          IMAGE=${{ secrets.ACR_NAME }}.azurecr.io/fcg-games:${{ github.sha }}
           az containerapp update \
             --name ${{ secrets.CONTAINER_APP_NAME }} \
             --resource-group ${{ secrets.RESOURCE_GROUP }} \
-            --image $IMAGE
-          az containerapp ingress traffic set \
-            --name ${{ secrets.CONTAINER_APP_NAME }} \
-            --resource-group ${{ secrets.RESOURCE_GROUP }} \
-            --revision-weight latest=100
+            --image ${{ secrets.ACR_NAME }}.azurecr.io/fcg-games:${{ github.sha }}
