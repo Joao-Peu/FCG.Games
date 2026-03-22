@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using Azure.Messaging.ServiceBus;
 using FCG.Games.Application.EventHandlers;
@@ -43,6 +44,14 @@ public class ServiceBusConsumerService : BackgroundService
 
     private async Task ProcessMessageAsync(ProcessMessageEventArgs args)
     {
+        var correlationId = args.Message.CorrelationId ?? Guid.NewGuid().ToString();
+
+        using var activity = new Activity("process-payment-event");
+        activity.SetParentId(correlationId);
+        activity.Start();
+
+        using var logScope = _logger.BeginScope(new Dictionary<string, object> { ["CorrelationId"] = correlationId });
+
         try
         {
             var @event = JsonSerializer.Deserialize<PaymentProcessedEvent>(args.Message.Body.ToString());
@@ -53,8 +62,8 @@ public class ServiceBusConsumerService : BackgroundService
             await handler.HandleAsync(@event, args.CancellationToken);
 
             await args.CompleteMessageAsync(args.Message, args.CancellationToken);
-            _logger.LogInformation("Processed payment event for OrderId {OrderId} with status {Status}",
-                @event.OrderId, @event.Status);
+            _logger.LogInformation("Processed payment event for OrderId {OrderId} with status {Status} CorrelationId {CorrelationId}",
+                @event.OrderId, @event.Status, correlationId);
         }
         catch (Exception ex)
         {

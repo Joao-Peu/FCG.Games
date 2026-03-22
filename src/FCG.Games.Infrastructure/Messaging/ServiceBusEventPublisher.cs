@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using Azure.Messaging.ServiceBus;
 using FCG.Games.Domain.Interfaces;
@@ -27,15 +28,12 @@ public class ServiceBusEventPublisher : IEventPublisher
                 ContentType = "application/json"
             };
 
-            // Try to extract CorrelationId from the message via reflection
-            var correlationProp = typeof(T).GetProperty("CorrelationId");
-            if (correlationProp?.GetValue(message) is string correlationId)
-            {
-                sbMessage.CorrelationId = correlationId;
-            }
+            var correlationId = Activity.Current?.Id ?? Guid.NewGuid().ToString();
+            sbMessage.CorrelationId = correlationId;
 
             await sender.SendMessageAsync(sbMessage, cancellationToken);
-            _logger.LogInformation("Published {EventType} to queue {Queue}", typeof(T).Name, topic);
+            _logger.LogInformation("Published {EventType} to queue {Queue} with CorrelationId {CorrelationId}",
+                typeof(T).Name, topic, correlationId);
         }
         catch (Exception ex)
         {

@@ -89,44 +89,56 @@ flowchart LR
 
 ```mermaid
 sequenceDiagram
-    actor U as Usuário
-    participant UA as FGC.Users API
-    participant GA as FCG.Games API
-    participant Q1 as Queue: order-placed
-    participant PF as ProcessPaymentFunction
-    participant Q2 as Queue: payments-processed
-    participant CS as ConsumerService
+    actor U as 🎮 Usuário
+    participant UA as 👤 FGC.Users API
+    participant GA as 🕹️ FCG.Games API
+    participant Q1 as 📨 Queue: order-placed
+    participant PF as ⚡ ProcessPaymentFunction
+    participant Q2 as 📨 Queue: payments-processed
+    participant CS as 🔄 ConsumerService
 
-    Note over U,CS: 1. Autenticação
-    U->>UA: POST /api/auth/login {email, password}
-    UA-->>U: {token, expiresAt}
-
-    Note over U,CS: 2. Navegação
-    U->>GA: GET /api/games
-    GA-->>U: Lista de jogos [{id, title, price}]
-
-    Note over U,CS: 3. Compra
-    U->>GA: POST /api/games/{id}/purchase [Bearer token]
-    GA->>GA: Cria OrderGame (PendingPayment)
-    GA->>Q1: OrderPlacedEvent {orderId, userId, gameId, price}
-    GA-->>U: 202 Accepted {orderId}
-
-    Note over U,CS: 4. Processamento Assíncrono
-    Q1->>PF: ServiceBusTrigger dispara
-    PF->>PF: Processa pagamento (centavos pares=Approved)
-    PF->>Q2: PaymentProcessedEvent {orderId, status}
-
-    Note over U,CS: 5. Conclusão
-    Q2->>CS: Consumer recebe evento
-    alt Approved
-        CS->>GA: Completa pedido + Adiciona à biblioteca
-    else Rejected
-        CS->>GA: Marca pedido como PaymentFailed
+    rect rgb(59, 130, 246, 0.1)
+        Note over U,CS: 🔐 1. Autenticação
+        U->>+UA: POST /api/auth/login {email, password}
+        UA-->>-U: ✅ {token, expiresAt}
     end
 
-    Note over U,CS: 6. Verificação
-    U->>GA: GET /api/games/library [Bearer token]
-    GA-->>U: Jogos na biblioteca do usuário
+    rect rgb(16, 185, 129, 0.1)
+        Note over U,CS: 🔍 2. Navegação
+        U->>+GA: GET /api/games
+        GA-->>-U: 📋 Lista de jogos [{id, title, price}]
+    end
+
+    rect rgb(245, 158, 11, 0.1)
+        Note over U,CS: 🛒 3. Compra
+        U->>+GA: POST /api/games/{id}/purchase [Bearer token]
+        GA->>GA: Cria OrderGame (PendingPayment)
+        GA-)Q1: OrderPlacedEvent {orderId, userId, gameId, price}
+        GA-->>-U: 202 Accepted {orderId}
+    end
+
+    rect rgb(139, 92, 246, 0.1)
+        Note over U,CS: 💳 4. Processamento Assíncrono
+        Q1-)PF: ServiceBusTrigger dispara
+        PF->>PF: Processa pagamento (centavos pares = Approved)
+        PF-)Q2: PaymentProcessedEvent {orderId, status}
+    end
+
+    rect rgb(236, 72, 153, 0.1)
+        Note over U,CS: 📦 5. Conclusão
+        Q2-)CS: Consumer recebe evento
+        alt ✅ Approved
+            CS->>GA: Completa pedido + Adiciona à biblioteca
+        else ❌ Rejected
+            CS->>GA: Marca pedido como PaymentFailed
+        end
+    end
+
+    rect rgb(20, 184, 166, 0.1)
+        Note over U,CS: 📚 6. Verificação
+        U->>+GA: GET /api/games/library [Bearer token]
+        GA-->>-U: 🎮 Jogos na biblioteca do usuário
+    end
 ```
 
 ## Padrões Arquiteturais
