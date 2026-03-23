@@ -3,6 +3,7 @@ using System.Diagnostics.Metrics;
 using System.Text.Json;
 using Azure.Messaging.ServiceBus;
 using FCG.Games.Domain.Interfaces;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 
 namespace FCG.Games.Infrastructure.Messaging;
@@ -17,11 +18,13 @@ public class ServiceBusEventPublisher : IEventPublisher
 
     private readonly ServiceBusClient _client;
     private readonly ILogger<ServiceBusEventPublisher> _logger;
+    private readonly IHttpContextAccessor _httpContextAccessor;
 
-    public ServiceBusEventPublisher(ServiceBusClient client, ILogger<ServiceBusEventPublisher> logger)
+    public ServiceBusEventPublisher(ServiceBusClient client, ILogger<ServiceBusEventPublisher> logger, IHttpContextAccessor httpContextAccessor)
     {
         _client = client;
         _logger = logger;
+        _httpContextAccessor = httpContextAccessor;
     }
 
     public async Task PublishAsync<T>(string topic, T message, CancellationToken cancellationToken = default)
@@ -35,7 +38,8 @@ public class ServiceBusEventPublisher : IEventPublisher
                 ContentType = "application/json"
             };
 
-            var correlationId = Activity.Current?.Id ?? Guid.NewGuid().ToString();
+            var correlationId = _httpContextAccessor.HttpContext?.Items["CorrelationId"]?.ToString()
+                ?? Guid.NewGuid().ToString();
             sbMessage.CorrelationId = correlationId;
 
             await sender.SendMessageAsync(sbMessage, cancellationToken);

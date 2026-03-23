@@ -110,6 +110,7 @@ try
     });
 
     // Application + Infrastructure layers
+    services.AddHttpContextAccessor();
     services.AddApplication();
     services.AddInfrastructure(configuration);
 

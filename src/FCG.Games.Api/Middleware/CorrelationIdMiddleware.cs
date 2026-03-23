@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Serilog.Context;
 
 namespace FCG.Games.Api.Middleware;
 
@@ -8,16 +9,20 @@ public class CorrelationIdMiddleware : IMiddleware
 
     public async Task InvokeAsync(HttpContext context, RequestDelegate next)
     {
-        if (!context.Request.Headers.TryGetValue(Header, out var correlation))
+        if (!context.Request.Headers.TryGetValue(Header, out var correlation) || string.IsNullOrEmpty(correlation))
         {
             correlation = Guid.NewGuid().ToString();
             context.Request.Headers[Header] = correlation;
         }
 
         context.Response.Headers[Header] = correlation;
-        using var activity = new Activity("request-correlation");
-        activity.SetParentId(correlation);
-        activity.Start();
-        await next(context);
+
+        // Store correlation ID in HttpContext for downstream use
+        context.Items["CorrelationId"] = correlation.ToString();
+
+        using (LogContext.PushProperty("CorrelationId", correlation.ToString()))
+        {
+            await next(context);
+        }
     }
 }

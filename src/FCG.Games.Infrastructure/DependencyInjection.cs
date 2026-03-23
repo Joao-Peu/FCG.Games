@@ -36,7 +36,7 @@ public static class DependencyInjection
         var sbConnectionString = configuration["ServiceBus:ConnectionString"];
         if (!string.IsNullOrWhiteSpace(sbConnectionString))
         {
-            services.AddSingleton(_ => new ServiceBusClient(sbConnectionString)); 
+            services.AddSingleton(_ => new ServiceBusClient(sbConnectionString));
             services.AddSingleton<IEventPublisher, ServiceBusEventPublisher>();
 
             var queue = configuration["ServiceBus:PaymentProcessedQueue"] ?? "payments-processed";
