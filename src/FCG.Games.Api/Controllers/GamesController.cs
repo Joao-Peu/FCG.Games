@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.Security.Claims;
+using FCG.Games.Api.Diagnostics;
 using FCG.Games.Application.Abstractions;
 using FCG.Games.Application.Commands;
 using FCG.Games.Application.DTOs;
@@ -47,6 +49,7 @@ public class GamesController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> ListGames(CancellationToken cancellationToken)
     {
+        GameMetrics.GamesCatalogQueries.Add(1);
         var result = await _listGamesHandler.HandleAsync(new ListGamesQuery(), cancellationToken);
         return Ok(result.Value);
     }
@@ -98,16 +101,19 @@ public class GamesController : ControllerBase
         var userId = GetUserId();
         if (userId is null) return Unauthorized();
 
+        GameMetrics.PurchaseRequests.Add(1);
         var command = new PlaceOrderCommand(userId.Value, gameId);
         var result = await _placeOrderHandler.HandleAsync(command, cancellationToken);
 
         if (result.IsFailure)
         {
+            GameMetrics.PurchaseFailed.Add(1, new TagList { { "error.reason", result.Error.Code } });
             if (result.Error == Errors.GameNotFound)
                 return NotFound(new { error = result.Error.Message });
             return Conflict(new { error = result.Error.Message });
         }
 
+        GameMetrics.PurchaseSucceeded.Add(1);
         return Accepted(result.Value);
     }
 
@@ -125,6 +131,7 @@ public class GamesController : ControllerBase
     [HttpGet("recommendations")]
     public async Task<IActionResult> GetRecommendations(CancellationToken cancellationToken)
     {
+        GameMetrics.RecommendationQueries.Add(1);
         var userId = GetUserId();
         var query = new GetRecommendationsQuery(userId);
         var result = await _recommendationsHandler.HandleAsync(query, cancellationToken);

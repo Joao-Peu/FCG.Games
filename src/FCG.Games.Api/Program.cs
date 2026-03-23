@@ -1,11 +1,18 @@
 using System.Text;
+using Azure.Monitor.OpenTelemetry.AspNetCore;
+using FCG.Games.Api.Diagnostics;
 using FCG.Games.Api.Middleware;
 using FCG.Games.Application;
 using FCG.Games.Infrastructure;
 using FCG.Games.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 using Scalar.AspNetCore;
 using Serilog;
 using Serilog.Sinks.ApplicationInsights.TelemetryConverters;
@@ -36,6 +43,41 @@ try
             wt => wt.ApplicationInsights(
                 context.Configuration["ApplicationInsights:ConnectionString"],
                 new TraceTelemetryConverter())));
+
+    // OpenTelemetry
+    var azMonitorCs = configuration["ApplicationInsights:ConnectionString"];
+    var otelBuilder = builder.Services.AddOpenTelemetry()
+        .ConfigureResource(res => res.AddService(
+            serviceName: GameMetrics.ServiceName,
+            serviceVersion: typeof(Program).Assembly.GetName().Version?.ToString() ?? "1.0.0"))
+        .WithTracing(tracing => tracing
+            .AddSource(GameMetrics.ServiceName)
+            .AddAspNetCoreInstrumentation(opts =>
+            {
+                opts.RecordException = true;
+                opts.Filter = ctx => !ctx.Request.Path.StartsWithSegments("/health");
+            })
+            .AddHttpClientInstrumentation(opts => opts.RecordException = true)
+)
+        .WithMetrics(metrics => metrics
+            .AddMeter(GameMetrics.ServiceName)
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation()
+            .AddRuntimeInstrumentation());
+
+    if (!string.IsNullOrEmpty(azMonitorCs))
+        otelBuilder.UseAzureMonitor(opts => opts.ConnectionString = azMonitorCs);
+
+    // Health Checks
+    var healthBuilder = services.AddHealthChecks();
+    var dbCs = configuration.GetConnectionString("DefaultConnection");
+    if (!string.IsNullOrWhiteSpace(dbCs))
+        healthBuilder.AddSqlServer(dbCs, name: "sqlserver", tags: new[] { "db", "ready" });
+    var sbCs = configuration["ServiceBus:ConnectionString"];
+    if (!string.IsNullOrWhiteSpace(sbCs))
+        healthBuilder.AddAzureServiceBusQueue(sbCs,
+            queueName: configuration["ServiceBus:OrderPlacedQueue"] ?? "order-placed",
+            name: "servicebus", tags: new[] { "messaging", "ready" });
 
     // Controllers
     services.AddControllers();
@@ -96,10 +138,12 @@ try
 
     // Middleware
     services.AddSingleton<CorrelationIdMiddleware>();
+    services.AddSingleton<MetricsMiddleware>();
 
     var app = builder.Build();
 
     app.UseMiddleware<CorrelationIdMiddleware>();
+    app.UseMiddleware<MetricsMiddleware>();
     app.UseSerilogRequestLogging();
 
     app.UseSwagger();
@@ -119,6 +163,28 @@ try
     app.UseAuthentication();
     app.UseAuthorization();
     app.MapControllers();
+
+    // Health check endpoints
+    app.MapHealthChecks("/health/live", new HealthCheckOptions
+    {
+        Predicate = _ => false, // liveness: nenhuma dependência
+        ResultStatusCodes =
+        {
+            [HealthStatus.Healthy] = StatusCodes.Status200OK,
+            [HealthStatus.Degraded] = StatusCodes.Status200OK,
+            [HealthStatus.Unhealthy] = StatusCodes.Status503ServiceUnavailable
+        }
+    });
+    app.MapHealthChecks("/health/ready", new HealthCheckOptions
+    {
+        Predicate = check => check.Tags.Contains("ready"),
+        ResultStatusCodes =
+        {
+            [HealthStatus.Healthy] = StatusCodes.Status200OK,
+            [HealthStatus.Degraded] = StatusCodes.Status200OK,
+            [HealthStatus.Unhealthy] = StatusCodes.Status503ServiceUnavailable
+        }
+    });
 
     // Ensure DB created + seed (for dev/demo) — retries handle Azure SQL Serverless cold-start
     using (var scope = app.Services.CreateScope())
