@@ -22,6 +22,10 @@ spec:
         azure.workload.identity/use: "true"
     spec:
       serviceAccountName: sa-fcg-games
+
+      imagePullSecrets:
+        - name: acr-secret
+
       volumes:
         - name: secrets-store
           csi:
@@ -29,19 +33,24 @@ spec:
             readOnly: true
             volumeAttributes:
               secretProviderClass: "fcg-games-secrets"
+
       containers:
         - name: fcg-games
-          image: fcgregistry.azurecr.io/fcg-games:latest
+          image: fcgregistry-a2fjbegugxadcfac.azurecr.io/fcg-games:latest
           imagePullPolicy: Always
+
           ports:
             - containerPort: 8080
+
           volumeMounts:
             - name: secrets-store
               mountPath: "/mnt/secrets"
               readOnly: true
+
           envFrom:
             - secretRef:
                 name: fcg-games-secret
+
           resources:
             requests:
               memory: "64Mi"
@@ -49,15 +58,21 @@ spec:
             limits:
               memory: "256Mi"
               cpu: "500m"
+
           readinessProbe:
             httpGet:
               path: /ready
               port: 8080
-            initialDelaySeconds: 10
-            periodSeconds: 5
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+
           livenessProbe:
             httpGet:
               path: /health
               port: 8080
-            initialDelaySeconds: 15
-            periodSeconds: 10
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 6
